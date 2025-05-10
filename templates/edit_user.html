@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Edit User</title>
+  <!-- Bootstrap CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+  <!-- CropperJS CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1.5.13/dist/cropper.min.css" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+  <!-- Persian Datepicker CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css" />
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://unpkg.com/persian-date@1.1.0/dist/persian-date.min.js"></script>
+  <script src="https://unpkg.com/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/moment-jalaali@0.9.0/moment-jalaali.js"></script>
+
+</head>
+
+<body class="bg-light">
+    <div class="container mt-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h3>Edit Contact</h3>
+            <a href="{{ url_for('admin_panel') }}" class="btn btn-secondary btn-sm">Back to Admin Panel</a>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        <div class="alert alert-info" role="alert">
+            {{ messages[0] }}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <form method="POST">
+            <div class="card shadow-sm p-4 bg-white">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">First Name</label>
+                        <input type="text" name="first_name" class="form-control" value="{{ user.first_name }}"
+                            required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Last Name</label>
+                        <input type="text" name="last_name" class="form-control" value="{{ user.last_name }}" required>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Phone Numbers</label>
+                    <div id="phone-fields">
+                        {% for phone in user.phone_numbers %}
+                        <div class="input-group mb-2 phone-group">
+                            <input type="text" name="phone_numbers[]" class="form-control" value="{{ phone }}" required>
+                            <button type="button" class="btn btn-outline-danger remove-phone">×</button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="add-phone">+ Add Phone</button>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Birthdate</label>
+                        <input type="text" id="DatePickerDisplay" class="form-control" placeholder="تاریخ تولد" 
+                            value="{{ user.birthdate }}" required>
+                        <input type="hidden" id="DatePickerHidden" name="DatePickerHidden">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Email</label>
+                        <input type="email" name="email" class="form-control" value="{{ user.email }}">
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end">
+                    <button type="submit" class="btn btn-success">Save Changes</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        $(document).ready(function () {
+          const birthdateGregorian = "{{ user.birthdate }}"; // فرض بر اینکه فرمت YYYY-MM-DD است
+      
+          // تبدیل تاریخ میلادی به شمسی با moment-jalaali
+          let birthdateJalali = '';
+          if (birthdateGregorian) {
+            birthdateJalali = moment(birthdateGregorian, 'YYYY-MM-DD').format('jYYYY/jMM/jDD');
+            $('#DatePickerDisplay').val(birthdateJalali);
+            $('#DatePickerHidden').val(birthdateGregorian);
+          }
+      
+          $("#DatePickerDisplay").pDatepicker({
+            format: "YYYY/MM/DD",
+            altField: '#DatePickerHidden',
+            altFormat: 'YYYY-MM-DD',
+            observer: true,
+            initialValue: !!birthdateGregorian,
+            initialValueType: 'gregorian',
+            autoClose: true
+          });
+        });
+      </script>
+      
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- CropperJS -->
+  <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.5.13/dist/cropper.min.js"></script>
+  <!-- Custom JS -->
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+
+</html>

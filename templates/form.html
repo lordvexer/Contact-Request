@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Profile Form</title>
+
+  <!-- Bootstrap CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+  <!-- CropperJS CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1.5.13/dist/cropper.min.css" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+  <!-- Persian Datepicker CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css" />
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://unpkg.com/persian-date@1.1.0/dist/persian-date.min.js"></script>
+  <script src="https://unpkg.com/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/moment-jalaali@0.9.0/moment-jalaali.js"></script>
+
+</head>
+
+<body>
+  <div class="container">
+    <div class="form-section">
+      <h3 class="mb-4">Submit Your Profile</h3>
+
+      {% with messages = get_flashed_messages() %}
+      {% if messages %}
+      <div class="alert alert-info">{{ messages[0] }}</div>
+      {% endif %}
+      {% endwith %}
+
+      <form method="POST" enctype="multipart/form-data">
+        <div class="mb-3">
+          <label>First Name</label>
+          <input type="text" class="form-control" name="first_name" pattern="[A-Za-z]+" required>
+        </div>
+
+        <div class="mb-3">
+          <label>Last Name</label>
+          <input type="text" class="form-control" name="last_name" pattern="[A-Za-z]+" required>
+        </div>
+
+        <div class="mb-3">
+          <label>Phone Numbers</label>
+          <div id="phone-container">
+            <input type="text" name="phone_numbers[]" class="form-control mb-2" required>
+
+          </div>
+          <button type="button" class="btn btn-sm btn-secondary" onclick="addPhoneField()">+ Add Another</button>
+          
+        </div>
+
+        <div class="mb-3">
+          <label>Birthdate</label>
+          <input type="text" id="DatePickerDisplay" class="form-control" placeholder="تاریخ تولد" required>
+          <input type="hidden" id="DatePickerHidden" name="DatePickerHidden">
+        </div>
+
+        <div class="mb-3">
+          <label>Email (optional)</label>
+          <input type="email" class="form-control" name="email">
+        </div>
+
+        <div class="mb-3">
+          <label>Profile Image</label>
+          <input type="file" class="form-control" id="profile_image" name="profile_image" accept="image/*" required>
+          <img id="preview" src="#" alt="Preview" style="display:none;">
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100">Submit</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Crop Modal -->
+  <div class="modal fade" id="cropModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Crop Image</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body text-center">
+          <img id="cropper-image" src="#" style="max-width: 100%;" />
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="crop-button">Crop & Preview</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- CropperJS -->
+  <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.5.13/dist/cropper.min.js"></script>
+  <!-- Custom JS -->
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+
+
+
+
+
+</body>
+
+</html>
