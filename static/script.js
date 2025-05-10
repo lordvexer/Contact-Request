@@ -87,6 +87,10 @@ document.addEventListener('DOMContentLoaded', () => {
     cropper.destroy();
   });
 
+
+
+
+  
   // فقط اجازه تایپ حروف انگلیسی
   function allowOnlyEnglishInput(selector) {
     document.querySelectorAll(selector).forEach(input => {

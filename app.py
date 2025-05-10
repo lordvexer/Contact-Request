@@ -2,10 +2,18 @@ from flask import Flask, render_template, request, redirect, url_for, flash, sen
 from werkzeug.utils import secure_filename
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime , timedelta
 import csv
 import uuid
 from flask import session
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import jdatetime
+import logging
+
+# تنظیمات لاگ برای چاپ در کنسول
+logging.basicConfig(level=logging.DEBUG)
 
 
 ADMIN_USERNAME = 'admin'
@@ -25,17 +33,89 @@ if not os.path.exists(app.config['UPLOAD_FOLDER']):
 def init_db():
     conn = sqlite3.connect('database.db')
     c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    first_name TEXT NOT NULL,
-                    last_name TEXT NOT NULL,
-                    phone_numbers TEXT NOT NULL,
-                    birthdate TEXT NOT NULL,
-                    email TEXT,
-                    image_path TEXT
-                )''')
+
+    # ایجاد جدول users
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+            phone_numbers TEXT NOT NULL,
+            birthdate TEXT NOT NULL,
+            email TEXT,
+            image_path TEXT
+        )
+    ''')
+
+    # ایجاد جدول settings
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            adjust_day INTEGER NOT NULL
+        )
+    ''')
+
+    # بررسی وجود رکورد در جدول settings و درج مقدار اولیه در صورت خالی بودن
+    c.execute("SELECT COUNT(*) FROM settings")
+    if c.fetchone()[0] == 0:
+        c.execute("INSERT INTO settings (adjust_day) VALUES (0)")
+
     conn.commit()
     conn.close()
+
+
+
+@app.route('/update_settings', methods=['GET', 'POST'])
+def update_settings():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('login'))
+
+    if request.method == 'GET':
+        logging.debug("GET request received for update_settings.")
+
+        try:
+            # اتصال به دیتابیس و خواندن مقدار adjust_day از تنظیمات
+            conn = sqlite3.connect('database.db')
+            c = conn.cursor()
+            c.execute("SELECT adjust_day FROM settings WHERE id=1;")
+            row = c.fetchone()  # گرفتن مقدار اولین رکورد
+
+            # بررسی و لاگ گرفتن از نتیجه
+            if row:
+                adjust_day = row[1]  # اگر رکورد وجود داشت
+                logging.debug(f"Current adjust_day value from DB: {adjust_day}")
+            else:
+                adjust_day = 0  # اگر رکوردی نبود مقدار پیش‌فرض 0
+                logging.debug("No record found for settings, using default adjust_day = 0.")
+
+            conn.close()
+
+        except Exception as e:
+            logging.error(f"Error reading from database: {e}")
+            adjust_day = 0  # در صورت بروز خطا، مقدار پیش‌فرض 0
+
+        # ارسال مقدار به قالب برای نمایش
+        return render_template('settings.html', adjust_day=adjust_day)
+
+    elif request.method == 'POST':
+        adjust_day = request.form['adjust_day']
+        logging.debug(f"POST request received. Adjust day value to update: {adjust_day}")
+
+        # اتصال به دیتابیس و بروزرسانی تنظیمات
+        conn = sqlite3.connect('database.db')
+        c = conn.cursor()
+        c.execute("UPDATE settings SET adjust_day=? WHERE id=1", (adjust_day,))
+        conn.commit()
+        conn.close()
+
+        logging.debug(f"adjust_day value updated to {adjust_day} in DB.")
+
+        flash('Settings updated successfully!')
+        return redirect(url_for('admin_panel'))
+
+
+
+
 
 # -----------------------
 # HELPERS
@@ -235,6 +315,97 @@ def delete_user(user_id):
 
 
 
+def jalali_to_gregorian(jalali_date):
+    """تبدیل تاریخ شمسی به میلادی"""
+    year, month, day = map(int, jalali_date.split('-'))
+    jalali = jdatetime.date(year, month, day)
+    gregorian = jalali.togregorian()
+    return gregorian
+
+
+def check_birthdays_and_notify():
+    print("📅 Checking upcoming birthdays...")
+
+    # گرفتن تاریخ فردا
+    tomorrow = (datetime.now() + timedelta(days=1)).strftime('%m-%d')
+    print(f"🔍 Target date for matching: {tomorrow}")
+
+    # اتصال به دیتابیس و گرفتن تنظیمات adjust_day
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+    c.execute("SELECT adjust_day FROM settings WHERE id=1")
+    adjust_day = c.fetchone()[0]
+    conn.close()
+
+    # اگر adjust_day غیر صفر باشد، تاریخ هدف تغییر می‌کند
+    if adjust_day != 0:
+        tomorrow_date = datetime.strptime(tomorrow, '%m-%d') + timedelta(days=adjust_day)
+        tomorrow = tomorrow_date.strftime('%m-%d')
+        print(f"🔧 Adjusted target date for matching: {tomorrow}")
+
+    # اتصال مجدد به دیتابیس و گرفتن اطلاعات کاربران
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+    c.execute("SELECT first_name, last_name, email, birthdate FROM users")
+    users = c.fetchall()
+    conn.close()
+
+    print(f"👥 Total users found: {len(users)}")
+
+    matching_users = []
+    for user in users:
+        if not user[3]:
+            continue
+        try:
+            birth_mmdd = datetime.strptime(user[3], '%Y-%m-%d').strftime('%m-%d')
+            if birth_mmdd == tomorrow:
+                matching_users.append(user)
+        except Exception as e:
+            print(f"⛔ Error parsing birthdate for user {user}: {e}")
+            continue
+
+    # ارسال ایمیل به کاربران با تاریخ تولد فردا
+    if matching_users:
+        print(f"🎯 Users with birthdays tomorrow: {len(matching_users)}")
+        message = "🎉 Birthday reminder for tomorrow:\n\n"
+        for u in matching_users:
+            full_name = f"{u[0]} {u[1]}"
+            email = u[2] if u[2] else '—'
+            birthdate = u[3]
+            message += f"🎂 {full_name} (📧 {email}) - Birthdate: {birthdate}\n"
+        print("✉️ Sending email notification...")
+        send_email_notification(message)
+    else:
+        print("ℹ️ No birthdays found for tomorrow.")
+
+
+
+
+
+
+
+def send_email_notification(body):
+    sender_email = "remainder@rabinn.ir"
+    receiver_email = "h.nypdv@gmail.com"  # جایگزین کنید با ایمیل مقصد
+    password = "E6Dx#ZOF5zG+"  # رمز عبور ایمیل شما
+
+    msg = MIMEMultipart()
+    msg['From'] = sender_email
+    msg['To'] = receiver_email
+    msg['Subject'] = "Birthday Reminder"
+
+    msg.attach(MIMEText(body, 'plain'))
+
+    try:
+        print("🔌 Trying to connect to SMTP server...")
+        with smtplib.SMTP_SSL("mail.rabinn.ir", 465) as server:
+            server.set_debuglevel(1)  # فعال کردن حالت دیباگ برای دیدن جزییات اتصال
+            server.login(sender_email, password)  # ورود به سرور
+            print("🔑 Login successful!")
+            server.send_message(msg)  # ارسال ایمیل
+        print("✉️ Email sent successfully!")
+    except Exception as e:
+        print(f"❌ Email failed to send. Error: {e}")
 # -----------------------
 # START APP
 # -----------------------
