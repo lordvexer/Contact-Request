@@ -14,13 +14,16 @@ import logging
 
 # تنظیمات لاگ برای چاپ در کنسول
 logging.basicConfig(level=logging.DEBUG)
+# در ابتدای فایل app.py
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(os.path.dirname(BASE_DIR), 'database', 'database.db')
 
 
 ADMIN_USERNAME = 'admin'
 ADMIN_PASSWORD = '24122412'
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'
+app.secret_key = '56468456456132'
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
@@ -31,7 +34,20 @@ if not os.path.exists(app.config['UPLOAD_FOLDER']):
 # DATABASE
 # -----------------------
 def init_db():
-    conn = sqlite3.connect('database.db')
+
+    # اگر متغیر محیطی DB_PATH تنظیم شده بود، از آن استفاده کن (برای cPanel)
+    db_path = os.environ.get('DB_PATH')
+
+    if not db_path:
+        # در لوکال: از مسیر نسبی به فولدر database استفاده کن
+        db_path = os.path.join(os.path.dirname(BASE_DIR), 'database', 'database.db')
+
+    # اطمینان از اینکه فولدر database وجود دارد
+    db_dir = os.path.dirname(db_path)
+    if not os.path.exists(db_dir):
+        os.makedirs(db_dir)
+
+    conn = sqlite3.connect(db_path)
     c = conn.cursor()
 
     # ایجاد جدول users
@@ -55,13 +71,15 @@ def init_db():
         )
     ''')
 
-    # بررسی وجود رکورد در جدول settings و درج مقدار اولیه در صورت خالی بودن
+    # بررسی مقدار اولیه
     c.execute("SELECT COUNT(*) FROM settings")
     if c.fetchone()[0] == 0:
         c.execute("INSERT INTO settings (adjust_day) VALUES (0)")
 
     conn.commit()
     conn.close()
+    print(f"📂 Database path: {db_path}")
+
 
 
 
@@ -75,7 +93,7 @@ def update_settings():
 
         try:
             # اتصال به دیتابیس و خواندن مقدار adjust_day از تنظیمات
-            conn = sqlite3.connect('database.db')
+            conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
             c.execute("SELECT adjust_day FROM settings WHERE id=1;")
             row = c.fetchone()  # گرفتن مقدار اولین رکورد
@@ -102,7 +120,7 @@ def update_settings():
         logging.debug(f"POST request received. Adjust day value to update: {adjust_day}")
 
         # اتصال به دیتابیس و بروزرسانی تنظیمات
-        conn = sqlite3.connect('database.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("UPDATE settings SET adjust_day=? WHERE id=1", (adjust_day,))
         conn.commit()
@@ -160,7 +178,7 @@ def index():
 
         phone_combined = ','.join(phone_numbers)
 
-        conn = sqlite3.connect('database.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
 
         c.execute("SELECT id FROM users WHERE phone_numbers LIKE ?", (f"%{phone_numbers[0]}%",))
@@ -188,7 +206,7 @@ def admin_panel():
     if not session.get('admin_logged_in'):
         return redirect(url_for('login'))
 
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT * FROM users")
     users = c.fetchall()
@@ -213,7 +231,7 @@ def admin_panel():
 
 @app.route('/export_csv')
 def export_csv():
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT * FROM users")
     rows = c.fetchall()
@@ -267,7 +285,7 @@ def edit_user(user_id):
     if not session.get('admin_logged_in'):
         return redirect(url_for('login'))
 
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     if request.method == 'POST':
         first_name = request.form['first_name']
@@ -305,7 +323,7 @@ def delete_user(user_id):
     if not session.get('admin_logged_in'):
         return redirect(url_for('login'))
 
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("DELETE FROM users WHERE id=?", (user_id,))
     conn.commit()
@@ -331,7 +349,7 @@ def check_birthdays_and_notify():
     print(f"🔍 Target date for matching: {tomorrow}")
 
     # اتصال به دیتابیس و گرفتن تنظیمات adjust_day
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT adjust_day FROM settings WHERE id=1")
     adjust_day = c.fetchone()[0]
@@ -344,7 +362,7 @@ def check_birthdays_and_notify():
         print(f"🔧 Adjusted target date for matching: {tomorrow}")
 
     # اتصال مجدد به دیتابیس و گرفتن اطلاعات کاربران
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT first_name, last_name, email, birthdate FROM users")
     users = c.fetchall()
