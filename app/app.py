@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file ,jsonify,render_template_string, g, session, send_from_directory,url_for
 from werkzeug.utils import secure_filename
 import os
 import sqlite3
@@ -12,6 +12,20 @@ from email.mime.multipart import MIMEMultipart
 import jdatetime
 import logging
 
+from apscheduler.schedulers.background import BackgroundScheduler
+
+
+
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///licenses.db'
+app.config['SECRET_KEY'] = '256556654'
+
+
+
+
+
+
+
 # تنظیمات لاگ برای چاپ در کنسول
 logging.basicConfig(level=logging.DEBUG)
 # در ابتدای فایل app.py
@@ -22,8 +36,6 @@ DB_PATH = os.path.join(os.path.dirname(BASE_DIR), 'database', 'database.db')
 ADMIN_USERNAME = 'admin'
 ADMIN_PASSWORD = '24122412'
 
-app = Flask(__name__)
-app.secret_key = '56468456456132'
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
@@ -147,7 +159,7 @@ def allowed_file(filename):
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    
+
     if request.method == 'POST':
         first_name = request.form['first_name']
         last_name = request.form['last_name']
@@ -427,6 +439,7 @@ def send_email_notification(body):
 # -----------------------
 # START APP
 # -----------------------
-if __name__ == '__main__':
-    init_db()
-    app.run(debug=True)
+# if __name__ == '__main__':
+#     init_db()
+#     start_scheduler()
+#     app.run(debug=True)
