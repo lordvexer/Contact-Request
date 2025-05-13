@@ -1,3 +1,5 @@
+import io
+import sys
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file ,jsonify,render_template_string, g, session, send_from_directory,url_for
 from werkzeug.utils import secure_filename
 import os
@@ -11,9 +13,9 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import jdatetime
 import logging
-
 from apscheduler.schedulers.background import BackgroundScheduler
-
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+import tempfile
 
 
 app = Flask(__name__)
@@ -161,19 +163,19 @@ def allowed_file(filename):
 def index():
 
     if request.method == 'POST':
-        first_name = request.form['first_name']
-        last_name = request.form['last_name']
-        birthdate = request.form['DatePickerHidden']
+        first_name = request.form.get('first_name')
+        last_name = request.form.get('last_name')
+        birthdate = request.form.get('DatePickerHidden')
         email = request.form.get('email')
         phone_numbers = request.form.getlist('phone_numbers[]')
-        profile_image = request.files['profile_image']
+        profile_image = request.files.get('profile_image')
+
+        if not first_name or not last_name or not birthdate or not phone_numbers or not phone_numbers[0]:
+            flash('Please fill in all required fields.')
+            return redirect(url_for('index'))
 
         if not first_name.isascii() or not last_name.isascii():
             flash('First and Last names must be in English only.')
-            return redirect(url_for('index'))
-
-        if not first_name or not last_name or not birthdate or not phone_numbers[0]:
-            flash('Please fill in all required fields.')
             return redirect(url_for('index'))
 
         try:
@@ -241,6 +243,15 @@ def admin_panel():
 
 
 
+
+def persian_to_english_digits(s):
+    persian_digits = '۰۱۲۳۴۵۶۷۸۹'
+    english_digits = '0123456789'
+    table = str.maketrans(''.join(persian_digits), ''.join(english_digits))
+    return s.translate(table)
+
+import tempfile
+
 @app.route('/export_csv')
 def export_csv():
     conn = sqlite3.connect(DB_PATH)
@@ -249,24 +260,40 @@ def export_csv():
     rows = c.fetchall()
     conn.close()
 
-    filename = 'all_contacts.csv'
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.csv', dir='.')
+    filename = temp_file.name
+
     with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
-        fieldnames = ['Name', 'Given Name', 'Family Name', 'Phone 1 - Value', 'Phone 2 - Value', 'E-mail 1 - Value']
+        fieldnames = ['Name', 'Given Name', 'Family Name', 'Phone 1 - Value', 'Phone 2 - Value', 'E-mail 1 - Value', 'Birthday (Gregorian)']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
 
         for row in rows:
             phones = row[3].split(',')
+
+            try:
+                shamsi_raw = row[4]
+                shamsi_clean = persian_to_english_digits(shamsi_raw)
+                parts = shamsi_clean.split('-')
+                j_date = jdatetime.date(int(parts[0]), int(parts[1]), int(parts[2]))
+                g_date = j_date.togregorian().strftime('%Y-%m-%d')
+            except Exception as e:
+                g_date = ''
+
             writer.writerow({
                 'Name': row[1] + ' ' + row[2],
                 'Given Name': row[1],
                 'Family Name': row[2],
                 'Phone 1 - Value': phones[0] if phones else '',
                 'Phone 2 - Value': phones[1] if len(phones) > 1 else '',
-                'E-mail 1 - Value': row[5] or ''
+                'E-mail 1 - Value': row[5] or '',
+                'Birthday (Gregorian)': g_date
             })
 
     return send_file(filename, as_attachment=True)
+
+
+
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -303,7 +330,7 @@ def edit_user(user_id):
         first_name = request.form['first_name']
         last_name = request.form['last_name']
         phone_numbers = ','.join(request.form.getlist('phone_numbers[]'))
-        birthdate = request.form['DatePickerHidden']
+        birthdate = request.form['birthdate']
         email = request.form['email']
         c.execute('''UPDATE users SET first_name=?, last_name=?, phone_numbers=?, birthdate=?, email=? WHERE id=?''',
                   (first_name, last_name, phone_numbers, birthdate, email, user_id))
@@ -344,14 +371,14 @@ def delete_user(user_id):
     return redirect(url_for('admin_panel'))
 
 
+import jdatetime
 
 def jalali_to_gregorian(jalali_date):
     """تبدیل تاریخ شمسی به میلادی"""
     year, month, day = map(int, jalali_date.split('-'))
     jalali = jdatetime.date(year, month, day)
     gregorian = jalali.togregorian()
-    return gregorian
-
+    return gregorian.strftime('%Y-%m-%d')  # تبدیل به فرمت میلادی و بازگشت آن
 
 def check_birthdays_and_notify():
     print("📅 Checking upcoming birthdays...")
@@ -387,7 +414,13 @@ def check_birthdays_and_notify():
         if not user[3]:
             continue
         try:
-            birth_mmdd = datetime.strptime(user[3], '%Y-%m-%d').strftime('%m-%d')
+            # اگر تاریخ شمسی بود، تبدیل به میلادی کنید
+            if '۰' <= user[3][0] <= '۹':  # بررسی اینکه آیا تاریخ به فارسی است
+                birthdate = jalali_to_gregorian(user[3])
+            else:
+                birthdate = user[3]
+            
+            birth_mmdd = datetime.strptime(birthdate, '%Y-%m-%d').strftime('%m-%d')
             if birth_mmdd == tomorrow:
                 matching_users.append(user)
         except Exception as e:
@@ -413,7 +446,6 @@ def check_birthdays_and_notify():
 
 
 
-
 def send_email_notification(body):
     sender_email = "remainder@rabinn.ir"
     receiver_email = "h.nypdv@gmail.com"  # جایگزین کنید با ایمیل مقصد
@@ -429,7 +461,7 @@ def send_email_notification(body):
     try:
         print("🔌 Trying to connect to SMTP server...")
         with smtplib.SMTP_SSL("mail.rabinn.ir", 465) as server:
-            server.set_debuglevel(1)  # فعال کردن حالت دیباگ برای دیدن جزییات اتصال
+            #server.set_debuglevel(1)  # فعال کردن حالت دیباگ برای دیدن جزییات اتصال
             server.login(sender_email, password)  # ورود به سرور
             print("🔑 Login successful!")
             server.send_message(msg)  # ارسال ایمیل
@@ -439,7 +471,6 @@ def send_email_notification(body):
 # -----------------------
 # START APP
 # -----------------------
-# if __name__ == '__main__':
-#     init_db()
-#     start_scheduler()
-#     app.run(debug=True)
+if __name__ == '__main__':
+     init_db()
+     app.run(debug=True)
